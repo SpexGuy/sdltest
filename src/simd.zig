@@ -150,12 +150,11 @@ pub fn mulmf34(x: Float3x4, y: Float3x4) Float3x4 {
 
     comptime var row = 0;
     inline while (row < 3) : (row += 1) {
-        var total = Float4{0, 0, 0, 0};
-        comptime var col = 0;
-        inline while (col < 4) : (col += 1) {
-            total += @splat(4, x.rows[row][col]) * y.rows[col];
-        }
-        result.rows[row] = total;
+        const a = @splat(4, x.rows[row][0]) * y.rows[0];
+        const b = @splat(4, x.rows[row][1]) * y.rows[1];
+        const c = @splat(4, x.rows[row][2]) * y.rows[2];
+        const d = @splat(4, x.rows[row][3]) * Float4{0,0,0,1};
+        result.rows[row] = (a + b) + (c + d);
     }
 
     return result;
@@ -165,12 +164,11 @@ pub fn mulmf44(x: Float4x4, y: Float4x4) Float4x4 {
 
     comptime var row = 0;
     inline while (row < 4) : (row += 1) {
-        var total = Float4{0, 0, 0, 0};
-        comptime var col = 0;
-        inline while (col < 4) : (col += 1) {
-            total += @splat(4, x.rows[row][col]) * y.rows[col];
-        }
-        result.rows[row] = total;
+        const a = @splat(4, x.rows[row][0]) * y.rows[0];
+        const b = @splat(4, x.rows[row][1]) * y.rows[1];
+        const c = @splat(4, x.rows[row][2]) * y.rows[2];
+        const d = @splat(4, x.rows[row][3]) * y.rows[3];
+        result.rows[row] = (a + b) + (c + d);
     }
 
     return result;
