@@ -16,13 +16,12 @@ Make sure to have the following tools available on your path:
 * zig (master, from https://ziglang.org/download/)
 * dxc (part of the Vulkan SDK, from https://vulkan.lunarg.com/sdk/home)
 
-You will also need to have a version of visual studio installed, at least as new as VS 2017.
+The program uses MSVC libc by default, so you will need VS2017 or later.  Or build with `-Dtarget=native-native-gnu` to use mingw (packaged with zig) instead.
 
-To build, use the command
+To build and run, use the command
 ```
 zig build run
 ```
-to build and run the project.
 
 If you want an executable for debugging, use the command
 ```
@@ -36,16 +35,16 @@ Zig build supports several flags.  Use `zig build --help` to get a full list.  S
 zig build -Drelease-fast
 
 # build a redistributable binary
-zig build -Dtarget=x86_64-native-msvc
+zig build -Dtarget=x86_64-native-gnu
 ```
 
 ## VSCode
 
 Debugging through VS Code is supported for this project.  You will need the C/C++ extension for VSCode, and you may also need to check "Debug: Allow Breakpoints Everywhere" in File -> Preferences -> Settings.  The project has debug configurations set up for debugging both debug and release builds.  For a better browsing and editing experience, also check out the Zig Language Server: https://github.com/zigtools/zls.
 
-## Building your own versions of the third-party libraries
+## Third-party libraries
 
-This project vendors pre-built lib files for SDL and vulkan-1. vulkan-1.lib comes directly from the Lib folder of the SDK.  SDL.lib was built from the visual studio project distributed with the official SDL source, with two modifications: the "HAVE_LIBC" preprocessor define was added to the project files, in order to avoid duplicate symbols when linking, and the Runtime Library was switched from /MD to /MT, in order to be compatible with Zig's linking style.
+This project vendors a pre-built lib file for vulkan-1, which comes directly from the Lib folder of the SDK.
 
 ## Structure of this repo
 
@@ -53,9 +52,10 @@ This project vendors pre-built lib files for SDL and vulkan-1. vulkan-1.lib come
 * include: Zig files which provide extern declarations for C libraries
 * lib: Precompiled binaries for third party dependencies
 * shaders: Shader source files, in hlsl
+* sdl: Copy of the SDL library, with slight modifications (search for "ZIG MOD")
 * src: Zig source for the project
 * build.zig: Build script
 
 ## Future Work
 
-There's still more that can be done on this port.  So far, Zig doesn't have a build script port of SDL's extremely complicated CMakeLists.txt.  But in theory such a thing could be made, and with it we could compile SDL from source with `zig cc`, and link the .o files in directly without creating a static library.  With that, cross-compiling this project would be trivial.
+There's still more that can be done on this port.  The build.zig file contains a partial port of SDL's CMakeLists.txt, but this currently only supports windows.  Some more work is needed to add support for other platforms.

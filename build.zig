@@ -106,7 +106,7 @@ fn linkSDL(b: *Builder, step: *std.build.LibExeObjStep, target: std.zig.CrossTar
     c_args.append("-DHAVE_LIBC") catch unreachable;
     step.linkLibC();
 
-    if (mode != .ReleaseFast) {
+    if (mode == .ReleaseFast) {
         c_args.append("-DNDEBUG") catch unreachable;
     } else {
         c_args.append("-D_DEBUG") catch unreachable;
@@ -150,7 +150,7 @@ fn linkSDL(b: *Builder, step: *std.build.LibExeObjStep, target: std.zig.CrossTar
     const have_filesystem = true;
     const have_haptic = true;
     const have_hidapi = true;
-    const have_joystick = true; // missing system include windows.gaming.input.h
+    const have_joystick = true;
     const have_loadso = true;
     const have_misc = true;
     const have_power = true;
