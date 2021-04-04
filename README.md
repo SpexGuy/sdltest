@@ -1,73 +1,61 @@
 # sdltest
 
-A simple test application in C for Windows, Android and Others. 
+A simple vulkan + SDL test application in Zig for Windows.
 
 It currently draws a spinning cube and a fullscreen fractal.
 
-## Port this project!
-If you want to port this project to another language or platform please do! I'm actually really interested to see what this project looks like to you "the right way". What am I doing wrong? How would you organize this code? What language would you write it in? What platform do you want to see it running on? I want to know!
-
-https://twitter.com/ArsenTufankjian/status/1376621614297538562
-
-I'm particularly interested in seeing ports to other language ecosystems like Rust, Zig, Odin, Nim etc. What would this project look like if it was a *perfect* example of how to build a program like this in your favorite development environment? 
-
-Or maybe you think that the C I've written here is bad and you think my code could be optimized. In that case what does this look like as your perfect C project? 
-
-Can you write this code in your favorite language and still have it targeting multiple platforms? Can you get it running on a homebrewed game console? 
-
-If you remix this project in an interesting way tweet a link to your fork and a demo to me (and the world!) and I'll venmo you $50 or something. I'm willing to fork up the cash for up to a few dozen remixes of this. Just make sure to show everyone your code!
+This was ported from https://github.com/Honeybunch/sdltest
 
 ## Building
 
+This project currently only supports Windows, but I don't believe there's any code outside of the build script that limits it to that platform.  In theory this should be portable to other platforms as long as a static SDL library can be built for that platform.  Some of the bindings may not work properly on big-endian systems.
+
 ### Windows
-Make sure to have the following available on your path:
-* ninja
-* cmake 3.20
-* clang
 
-You will need the VS2019 build tools, a Windows 10 Kit install and LLVM for Windows installed.
+Make sure to have the following tools available on your path:
+* zig (master, from https://ziglang.org/download/)
+* dxc (part of the Vulkan SDK, from https://vulkan.lunarg.com/sdk/home)
 
-This project relies on semantics provided by clang/gcc because I was lazy and didn't want to write out SSE/NEON intrinsics for some basic math.
+You will also need to have a version of visual studio installed, at least as new as VS 2017.
 
-### Android
-Make sure the following environment variables are set properly
-* `ANDROID_NDK_HOME`
-* `ANDROID_HOME`
-* `JAVA_HOME`
+To build, use the command
+```
+zig build run
+```
+to build and run the project.
 
-Android Studio is not used for the build process but the Android SDK, NDK and a Java 8 installation needs to be available. If these are sourced from your Android Studio install there should be no problems.
+If you want an executable for debugging, use the command
+```
+zig build
+```
+to put the executable in `zig-cache/bin/sdltest.exe`.
 
-### Vcpkg
-Make sure to bootstrap vcpkg with `./vcpkg/boostrap-vcpkg.bat`
+Zig build supports several flags.  Use `zig build --help` to get a full list.  Some common ones you might want:
+```
+# build in release mode
+zig build -Drelease-fast
 
-Install the following packages:
-* sdl2[vulkan]
-* volk
-* vulkan
+# build a redistributable binary
+zig build -Dtarget=x86_64-native-msvc
+```
 
-For the following triplets:
+## VSCode
 
-#### Known Working Vcpkg Triples
-* x64-windows
-* x64-windows-static
-* arm64-android
+Debugging through VS Code is supported for this project.  You will need the C/C++ extension for VSCode, and you may also need to check "Debug: Allow Breakpoints Everywhere" in File -> Preferences -> Settings.  The project has debug configurations set up for debugging both debug and release builds.  For a better browsing and editing experience, also check out the Zig Language Server: https://github.com/zigtools/zls.
 
-#### Should-be-working vcpkg triplets
-* x64-android
+## Building your own versions of the third-party libraries
 
-For example to build for Windows you would need to run:
-* `./vcpkg/vcpkg install vulkan:x64-windows`
-* `./vcpkg/vcpkg install volk:x64-windows`
-* `./vcpkg/vcpkg install sdl2[vulkan]:x64-windows`
+This project vendors pre-built lib files for SDL and vulkan-1. vulkan-1.lib comes directly from the Lib folder of the SDK.  SDL.lib was built from the visual studio project distributed with the official SDL source, with two modifications: the "HAVE_LIBC" preprocessor define was added to the project files, in order to avoid duplicate symbols when linking, and the Runtime Library was switched from /MD to /MT, in order to be compatible with Zig's linking style.
 
-### VSCode
+## Structure of this repo
 
-It's recommended that to build you use the tasks provided by the vscode workspace.
+* c_src: Libraries and stubs for C code.  In this case, just VMA.
+* include: Zig files which provide extern declarations for C libraries
+* lib: Precompiled binaries for third party dependencies
+* shaders: Shader source files, in hlsl
+* src: Zig source for the project
+* build.zig: Build script
 
-Simply run a task like `Configure x64 Windows` to generate the cmake project.
+## Future Work
 
-Then just run `Build x64 Windows Debug` to build the Windows project.
-
-Additionally for Android you'll want to run the Install and Package tasks to get an installable APK. 
-
-Feel free inspect the tasks and just run them from your terminal if you want.
+There's still more that can be done on this port.  So far, Zig doesn't have a build script port of SDL's extremely complicated CMakeLists.txt.  But in theory such a thing could be made, and with it we could compile SDL from source with `zig cc`, and link the .o files in directly without creating a static library.  With that, cross-compiling this project would be trivial.
