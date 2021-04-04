@@ -27,23 +27,11 @@ pub fn build(b: *Builder) !void {
     exe.step.dependOn(fractal);
     exe.step.dependOn(mesh);
 
-    exe.linkLibC();
+    try linkSDL(b, exe, target, mode);
 
     // Link platform object files
     if (target.isWindows()) {
         exe.linkSystemLibrary("lib/win_x64/vulkan-1");
-        exe.linkSystemLibrary("lib/win_x64/SDL2");
-        // Windows DLLs we need
-        exe.linkSystemLibrary("Advapi32");
-        exe.linkSystemLibrary("Gdi32");
-        exe.linkSystemLibrary("Imm32");
-        exe.linkSystemLibrary("Ole32");
-        exe.linkSystemLibrary("OleAut32");
-        exe.linkSystemLibrary("SetupAPI");
-        exe.linkSystemLibrary("Shell32");
-        exe.linkSystemLibrary("User32");
-        exe.linkSystemLibrary("Version"); // Api-ms-win-core-version-l1-1-0.dll
-        exe.linkSystemLibrary("Winmm");
     } else {
         return error.TodoLinkLibrariesForNonWindowsPlatforms;
     }
@@ -51,6 +39,9 @@ pub fn build(b: *Builder) !void {
     // Link VMA source directly
     exe.addCSourceFile("c_src/vma.cpp", getVmaArgs(mode));
     exe.addIncludeDir("c_src/vma");
+    if (target.getAbi() != .msvc) {
+        exe.linkSystemLibrary("c++");
+    }
 
     const vk: std.build.Pkg = .{
         .name = "vk",
@@ -107,8 +98,275 @@ fn addShaderSteps(b: *Builder, name: []const u8, debug: bool) *std.build.Step {
     return step;
 }
 
+fn linkSDL(b: *Builder, step: *std.build.LibExeObjStep, target: std.zig.CrossTarget, mode: std.builtin.Mode) !void {
+    step.addIncludeDir("sdl/include");
+    step.addIncludeDir("sdl/src/video/khronos");
+
+    var c_args = std.ArrayList([]const u8).init(b.allocator);
+    c_args.append("-DHAVE_LIBC") catch unreachable;
+    step.linkLibC();
+
+    if (mode != .ReleaseFast) {
+        c_args.append("-DNDEBUG") catch unreachable;
+    } else {
+        c_args.append("-D_DEBUG") catch unreachable;
+    }
+
+    if (target.isWindows()) {
+        c_args.append("-D_WINDOWS") catch unreachable;
+    }
+
+    // TODO: There's probably a much better way to do this, building a static
+    // data structure and pulling dirs out of it.
+
+    var source_files = std.ArrayList([]const u8).init(b.allocator);
+    var source_dirs = std.ArrayList([]const u8).init(b.allocator);
+    source_dirs.appendSlice(&.{
+        "sdl/src",
+        "sdl/src/atomic",
+        "sdl/src/audio",
+        "sdl/src/cpuinfo",
+        "sdl/src/dynapi",
+        "sdl/src/events",
+        "sdl/src/file",
+        "sdl/src/haptic",
+        "sdl/src/libm",
+        "sdl/src/locale",
+        "sdl/src/misc",
+        "sdl/src/power",
+        "sdl/src/render",
+        "sdl/src/sensor",
+        "sdl/src/stdlib",
+        "sdl/src/thread",
+        "sdl/src/timer",
+        "sdl/src/video",
+        "sdl/src/video/yuv2rgb",
+    }) catch unreachable;
+    source_dirs.appendSlice(try collectChildDirectories(b, "sdl/src/render")) catch unreachable;
+
+    // TODO: Detect android, can't do this from target alone
+    const android = false;
+    const have_audio = true;
+    const have_filesystem = true;
+    const have_haptic = true;
+    const have_hidapi = true;
+    const have_joystick = true; // missing system include windows.gaming.input.h
+    const have_loadso = true;
+    const have_misc = true;
+    const have_power = true;
+    const have_locale = true;
+    const have_timers = true;
+    const have_sensor = true;
+    const have_threads = true;
+    const have_video = true;
+
+    if (have_joystick) {
+        source_dirs.append("sdl/src/joystick") catch unreachable;
+        const have_virtual_joystick = true;
+        if (have_virtual_joystick) {
+            source_dirs.append("sdl/src/joystick/virtual") catch unreachable;
+        }
+        if (have_hidapi) {
+            source_dirs.append("sdl/src/joystick/hidapi") catch unreachable;
+        }
+    }
+
+    if (have_audio) {
+        const dummy_audio = true;
+        const disk_audio = true;
+        if (dummy_audio) {
+            source_dirs.append("sdl/src/audio/dummy") catch unreachable;
+        }
+        if (disk_audio) {
+            source_dirs.append("sdl/src/audio/disk") catch unreachable;
+        }
+    }
+
+    if (have_video) {
+        const dummy_video = true;
+        const offscreen_video = false;
+        if (dummy_video) {
+            source_dirs.append("sdl/src/video/dummy") catch unreachable;
+        }
+        if (offscreen_video) {
+            source_dirs.append("sdl/src/video/offscreen") catch unreachable;
+        }
+    }
+
+    if (android) {
+        // TODO: CMakeLists.txt line 964 include ndk sources also.
+        source_dirs.append("sdl/src/core/android") catch unreachable;
+        source_dirs.append("sdl/src/misc/android") catch unreachable;
+        if (have_audio) source_dirs.append("sdl/src/audio/android") catch unreachable;
+        if (have_filesystem) source_dirs.append("sdl/src/filesystem/android") catch unreachable;
+        if (have_haptic) source_dirs.append("sdl/src/haptic/android") catch unreachable;
+        if (have_joystick) source_dirs.append("sdl/src/joystick/android") catch unreachable;
+        if (have_loadso) source_dirs.append("sdl/src/loadso/dlopen") catch unreachable;
+        if (have_power) source_dirs.append("sdl/src/power/android") catch unreachable;
+        if (have_locale) source_dirs.append("sdl/src/locale/android") catch unreachable;
+        if (have_timers) source_dirs.append("sdl/src/timer/unix") catch unreachable;
+        if (have_sensor) source_dirs.append("sdl/src/sensor/android") catch unreachable;
+        if (have_video) {
+            source_dirs.append("sdl/src/video/android") catch unreachable;
+            c_args.append("-DGL_GLEXT_PROTOTYPES") catch unreachable;
+            // TODO: more stuff here
+        }
+    }
+
+    // TODO: Linux
+
+    if (target.isWindows()) {
+        source_dirs.appendSlice(&.{
+            "sdl/src/core/windows",
+            "sdl/src/misc/windows",
+        }) catch unreachable;
+
+        // TODO: windows store
+        // TODO: directx
+
+        if (have_audio) {
+            const have_dsound = true;
+            const have_wasapi = true;
+
+            source_dirs.append("sdl/src/audio/winmm") catch unreachable;
+            if (have_dsound) {
+                source_dirs.append("sdl/src/audio/directsound") catch unreachable;
+            }
+            if (have_wasapi) {
+                source_dirs.append("sdl/src/audio/wasapi") catch unreachable;
+            }
+        }
+
+        if (have_video) {
+            if (!have_loadso) {
+                std.debug.print("{s}", .{"Error: SDL video requires loadso on windows.\n"});
+                std.os.exit(-1);
+            }
+            // TODO: Windows store
+            source_dirs.append("sdl/src/video/windows") catch unreachable;
+            // TODO: D3D
+        }
+
+        if (have_threads) {
+            source_files.appendSlice(&.{
+                "sdl/src/thread/windows/SDL_sysmutex.c",
+                "sdl/src/thread/windows/SDL_syssem.c",
+                "sdl/src/thread/windows/SDL_systhread.c",
+                "sdl/src/thread/windows/SDL_systls.c",
+                "sdl/src/thread/generic/SDL_syscond.c",
+            }) catch unreachable;
+        }
+
+        if (have_sensor) {
+            source_dirs.append("sdl/src/sensor/windows") catch unreachable;
+        }
+
+        if (have_power) {
+            // TODO: windows store
+            source_files.append("sdl/src/power/windows/SDL_syspower.c") catch unreachable;
+        }
+
+        if (have_locale) {
+            source_dirs.append("sdl/src/locale/windows") catch unreachable;
+        }
+
+        if (have_filesystem) {
+            // TODO: windows store
+            source_dirs.append("sdl/src/filesystem/windows") catch unreachable;
+        }
+
+        if (have_timers) {
+            source_dirs.append("sdl/src/timer/windows") catch unreachable;
+        }
+
+        if (have_loadso) {
+            source_dirs.append("sdl/src/loadso/windows") catch unreachable;
+        }
+
+        if (have_video) {
+            // TODO: This just sets vars in cmake that aren't used?
+            // Also it's redundant with the check above.
+        }
+
+        if (have_joystick) {
+            if (have_hidapi) {
+                source_files.append("sdl/src/hidapi/windows/hid.c") catch unreachable;
+            }
+            // TODO: lots of options here
+            source_dirs.append("sdl/src/joystick/windows") catch unreachable;
+            if (have_haptic) {
+                // TODO
+                source_dirs.append("sdl/src/haptic/windows") catch unreachable;
+            }
+        }
+
+        // Windows DLLs we need
+        // TODO: not needed for windows store
+        step.linkSystemLibrary("Advapi32");
+        step.linkSystemLibrary("Gdi32");
+        step.linkSystemLibrary("Imm32");
+        step.linkSystemLibrary("Ole32");
+        step.linkSystemLibrary("OleAut32");
+        step.linkSystemLibrary("SetupAPI");
+        step.linkSystemLibrary("Shell32");
+        step.linkSystemLibrary("User32");
+        step.linkSystemLibrary("Version"); // Api-ms-win-core-version-l1-1-0.dll
+        step.linkSystemLibrary("Winmm");
+    }
+
+    // TODO: apple
+    // TODO: haiku
+    // TODO: riscos
+
+    // dummy files
+    if (!have_joystick) source_dirs.append("sdl/src/joystick/dummy") catch unreachable;
+    if (!have_haptic) source_dirs.append("sdl/src/haptic/dummy") catch unreachable;
+    if (!have_sensor) source_dirs.append("sdl/src/sensor/dummy") catch unreachable;
+    if (!have_loadso) source_dirs.append("sdl/src/loadso/dummy") catch unreachable;
+    if (!have_filesystem) source_dirs.append("sdl/src/filesystem/dummy") catch unreachable;
+    if (!have_locale) source_dirs.append("sdl/src/locale/dummy") catch unreachable;
+    if (!have_misc) source_dirs.append("sdl/src/misc/dummy") catch unreachable;
+    if (!have_threads) source_dirs.append("sdl/src/thread/generic") catch unreachable;
+    if (!have_timers) source_dirs.append("sdl/src/timer/dummy") catch unreachable;
+
+    for (source_dirs.items) |dir| {
+        source_files.appendSlice(try collectSources(b, dir, ".c")) catch unreachable;
+    }
+
+    step.addCSourceFiles(source_files.items, c_args.items);
+}
+
+fn collectSources(b: *Builder, path: []const u8, extension: []const u8) ![]const []const u8 {
+    var sources = std.ArrayList([]const u8).init(b.allocator);
+    const dir = try std.fs.cwd().openDir(path, .{ .iterate = true });
+    var it = dir.iterate();
+    while (try it.next()) |child| {
+        if (child.kind == .File) {
+            const ext = std.fs.path.extension(child.name);
+            if (std.ascii.eqlIgnoreCase(ext, extension)) {
+                const full_path = std.fs.path.join(b.allocator, &.{path, child.name}) catch unreachable;
+                sources.append(full_path) catch unreachable;
+            }
+        }
+    }
+    return sources.toOwnedSlice();
+}
+
+fn collectChildDirectories(b: *Builder, path: []const u8) ![]const []const u8 {
+    var dirs = std.ArrayList([]const u8).init(b.allocator);
+    const dir = try std.fs.cwd().openDir(path, .{ .iterate = true });
+    var it = dir.iterate();
+    while (try it.next()) |child| {
+        if (child.kind == .Directory) {
+            const full_path = std.fs.path.join(b.allocator, &.{path, child.name}) catch unreachable;
+            dirs.append(full_path) catch unreachable;
+        }
+    }
+    return dirs.toOwnedSlice();
+}
+
 fn getVmaArgs(mode: std.builtin.Mode) []const []const u8 {
-    const commonArgs = &[_][]const u8 { };
+    const commonArgs = &[_][]const u8 { "-std=c++14" };
     const releaseArgs = &[_][]const u8 { } ++ commonArgs ++ comptime getVmaConfigArgs(vma_config.releaseConfig);
     const debugArgs = &[_][]const u8 { } ++ commonArgs ++ comptime getVmaConfigArgs(vma_config.debugConfig);
     const args = if (mode == .Debug) debugArgs else releaseArgs;
