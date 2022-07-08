@@ -1,3 +1,4 @@
 sdl/
 zig-cache/
+zig-out/
 src/shader_data/

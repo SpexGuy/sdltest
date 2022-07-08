@@ -1,4 +1,7 @@
-usingnamespace @import("common.zig");
+const cmn = @import("common.zig");
+const simd = @import("simd.zig");
+const std = @import("std");
+const vk = @import("vk");
 
 const mesh_vert_shader = @embedFile("shader_data/mesh_vert.spv");
 const mesh_frag_shader = @embedFile("shader_data/mesh_frag.spv");
@@ -14,9 +17,9 @@ pub fn createMeshPipeline(
     layout: vk.PipelineLayout,
 ) !vk.Pipeline {
     const vert_bindings = [_]vk.VertexInputBindingDescription{
-        .{ .binding = 0, .stride = @sizeOf(Float3), .inputRate = .VERTEX },
-        .{ .binding = 1, .stride = @sizeOf(Float3), .inputRate = .VERTEX },
-        .{ .binding = 2, .stride = @sizeOf(Float3), .inputRate = .VERTEX },
+        .{ .binding = 0, .stride = @sizeOf(simd.Float3), .inputRate = .VERTEX },
+        .{ .binding = 1, .stride = @sizeOf(simd.Float3), .inputRate = .VERTEX },
+        .{ .binding = 2, .stride = @sizeOf(simd.Float3), .inputRate = .VERTEX },
     };
 
     const vert_attrs = [_]vk.VertexInputAttributeDescription{
@@ -123,26 +126,53 @@ fn createPipeline(
         .pScissors = &scissors,
     };
 
-    const raster_state = std.mem.zeroInit(vk.PipelineRasterizationStateCreateInfo, .{
+    const raster_state = vk.PipelineRasterizationStateCreateInfo{
         .polygonMode = .FILL,
         .cullMode = .{ .back = true },
         .frontFace = .COUNTER_CLOCKWISE,
         .lineWidth = 1,
-    });
 
-    const multisample_state = std.mem.zeroInit(vk.PipelineMultisampleStateCreateInfo, .{
-        .rasterizationSamples = .{ .t1 = true },
-    });
-
-    const depth_state = std.mem.zeroInit(vk.PipelineDepthStencilStateCreateInfo, .{
-        .maxDepthBounds = 1,
-    });
-
-    const attachment_states = [_]vk.PipelineColorBlendAttachmentState{ 
-        std.mem.zeroInit(vk.PipelineColorBlendAttachmentState, .{
-            .colorWriteMask = .{ .r=true, .g=true, .b=true, .a=true },
-        }),
+        .depthClampEnable = 0,
+        .rasterizerDiscardEnable = 0,
+        .depthBiasEnable = 0,
+        .depthBiasConstantFactor = 0,
+        .depthBiasClamp = 0,
+        .depthBiasSlopeFactor = 0,
     };
+
+    const multisample_state = vk.PipelineMultisampleStateCreateInfo{
+        .rasterizationSamples = .{ .t1 = true },
+
+        .sampleShadingEnable = 0,
+        .minSampleShading = 0,
+        .alphaToCoverageEnable = 0,
+        .alphaToOneEnable = 0,
+    };
+
+    const depth_state = vk.PipelineDepthStencilStateCreateInfo{
+        .minDepthBounds = 0,
+        .maxDepthBounds = 1,
+
+        .depthTestEnable = 0,
+        .depthWriteEnable = 0,
+        .depthCompareOp = .NEVER,
+        .depthBoundsTestEnable = 0,
+        .stencilTestEnable = 0,
+        .front = std.mem.zeroes(vk.StencilOpState),
+        .back = std.mem.zeroes(vk.StencilOpState),
+    };
+
+    const attachment_states = [_]vk.PipelineColorBlendAttachmentState{.{
+        .colorWriteMask = .{ .r=true, .g=true, .b=true, .a=true },
+
+        .blendEnable = 0,
+        .srcColorBlendFactor = .ZERO,
+        .dstColorBlendFactor = .ZERO,
+        .colorBlendOp = .ADD,
+        .srcAlphaBlendFactor = .ZERO,
+        .dstAlphaBlendFactor = .ZERO,
+        .alphaBlendOp = .ADD,
+    }};
 
     const color_blend_state = std.mem.zeroInit(vk.PipelineColorBlendStateCreateInfo, .{
         .attachmentCount = attachment_states.len,

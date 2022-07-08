@@ -1,8 +1,8 @@
-pub const std = @import("std");
-pub const vk = @import("vk");
-pub const vma = @import("vma");
-pub const sdl = @import("sdl");
-pub usingnamespace @import("simd.zig");
+const std = @import("std");
+const vk = @import("vk");
+const vma = @import("vma");
+const sdl = @import("sdl");
+const simd = @import("simd.zig");
 
 pub const assert = std.debug.assert;
 
@@ -64,7 +64,7 @@ pub const GpuMesh = struct {
             @memcpy(data + offset, @ptrCast([*]const u8, src.indices), size);
             offset += size;
             // Copy Positions
-            size = @sizeOf(Float3) * src.vertex_count;
+            size = @sizeOf(simd.Float3) * src.vertex_count;
             @memcpy(data + offset, @ptrCast([*]const u8, src.positions), size);
             offset += size;
             // Copy Colors
@@ -100,18 +100,18 @@ pub const CpuMesh = struct {
     index_count: u32,
     vertex_count: u32,
     indices: [*]const u16,
-    positions: [*]const Float3,
-    colors: [*]const Float3,
-    normals: [*]const Float3,
+    positions: [*]const simd.Float3,
+    colors: [*]const simd.Float3,
+    normals: [*]const simd.Float3,
 };
 
 pub const PUSH_CONSTANT_BYTES = 256;
 
 pub const PushConstants = extern struct {
-    time: Float4,
-    resolution: Float2,
-    mvp: Float4x4,
-    m: Float4x4,
+    time: simd.Float4,
+    resolution: simd.Float2,
+    mvp: simd.Float4x4,
+    m: simd.Float4x4,
 };
 comptime {
     if (@sizeOf(PushConstants) > PUSH_CONSTANT_BYTES)

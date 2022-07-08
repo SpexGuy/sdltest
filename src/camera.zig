@@ -1,18 +1,21 @@
-usingnamespace @import("common.zig");
+const cmn = @import("common.zig");
+const sdl = @import("sdl");
+const simd = @import("simd.zig");
+const std = @import("std");
 
 pub const Camera = struct {
-    transform: Transform,
+    transform: simd.Transform,
     aspect: f32,
     fov: f32,
     near: f32,
     far: f32,
 
-    pub fn viewProjection(self: Camera) Float4x4 {
+    pub fn viewProjection(self: Camera) simd.Float4x4 {
         const model_matrix = self.transform.toMatrix();
-        const forward = f4tof3(model_matrix.rows[2]);
-        const view = lookForward(self.transform.position, forward, .{0, 1, 0});
-        const proj = perspective(self.fov, self.aspect, self.near, self.far);
-        return mulmf44(proj, view);
+        const forward = simd.f4tof3(model_matrix.rows[2]);
+        const view = simd.lookForward(self.transform.position, forward, .{0, 1, 0});
+        const proj = simd.perspective(self.fov, self.aspect, self.near, self.far);
+        return simd.mulmf44(proj, view);
     }
 };
 
@@ -89,12 +92,12 @@ pub const EditorCameraController = struct {
     pub fn updateCamera(editor: *const Self, delta_time_seconds: f32, cam: *Camera) void {
         if (editor.state.isMoving()) {
             const mat = cam.transform.toMatrix();
-            const right = f4tof3(mat.rows[0]);
-            const up = f4tof3(mat.rows[1]);
-            const forward = f4tof3(mat.rows[2]);
+            const right = simd.f4tof3(mat.rows[0]);
+            //const up = simd.f4tof3(mat.rows[1]);
+            const forward = simd.f4tof3(mat.rows[2]);
 
             const delta_speed = @splat(3, editor.speed * delta_time_seconds);
-            var velocity: VFloat3 = VFloat3{0, 0, 0};
+            var velocity: simd.VFloat3 = .{0, 0, 0};
 
             if (editor.state.moving_forward) {
                 velocity -= forward * delta_speed;

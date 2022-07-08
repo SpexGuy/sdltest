@@ -1,7 +1,16 @@
-usingnamespace @import("common.zig");
-usingnamespace @import("pipelines.zig");
+const builtin = @import("builtin");
 const camera = @import("camera.zig");
+const cmn = @import("common.zig");
 const cube_cpu = @import("cube.zig").cpu_mesh;
+const pipelines = @import("pipelines.zig");
+const sdl = @import("sdl");
+const simd = @import("simd.zig");
+const std = @import("std");
+const vk = @import("vk");
+const vma = @import("vma");
+const assert = std.debug.assert;
+
+const arrayPtr = cmn.arrayPtr;
 
 const MAX_LAYER_COUNT = 16;
 const MAX_EXT_COUNT = 16;
@@ -12,10 +21,10 @@ const MESH_UPLOAD_QUEUE_SIZE = 16;
 const WIDTH = 1600;
 const HEIGHT = 900;
 
-const USE_VALIDATION = std.builtin.mode != .ReleaseFast;
+const USE_VALIDATION = builtin.mode != .ReleaseFast;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-const allocator = &gpa.allocator;
+const allocator = gpa.allocator();
 
 pub fn main() !void {
     // exit doesn't play well with defers,
@@ -98,7 +107,7 @@ pub fn mainNoExit() !void {
     var d = try Demo.init(window, instance);
     defer d.deinit();
 
-    var cube_transform: Transform = .{};
+    var cube_transform: simd.Transform = .{};
 
     var running = true;
     var last_time_ms: f32 = 0;
@@ -132,7 +141,7 @@ pub fn mainNoExit() !void {
         const cube_obj_mat = cube_transform.toMatrix();
 
         const vp = main_cam.viewProjection();
-        const cube_mvp = mulmf44(vp, cube_obj_mat);
+        const cube_mvp = simd.mulmf44(vp, cube_obj_mat);
 
         // Pass time to shader
         d.push_constants.time = .{time_seconds, time_ms, time_ns, time_us};
@@ -197,14 +206,14 @@ const Demo = struct {
     swap_img_idx: u32 = 0,
     fences: [FRAME_LATENCY]vk.Fence = [_]vk.Fence{.Null} ** FRAME_LATENCY,
 
-    cube_gpu: GpuMesh,
+    cube_gpu: cmn.GpuMesh,
     
     mesh_upload_count: u32 = 0,
-    mesh_upload_queue: [MESH_UPLOAD_QUEUE_SIZE]GpuMesh = undefined,
+    mesh_upload_queue: [MESH_UPLOAD_QUEUE_SIZE]cmn.GpuMesh = undefined,
 
-    push_constants: PushConstants = .{
-        .time = Float4{0,0,0,0},
-        .resolution = Float2{1,1},
+    push_constants: cmn.PushConstants = .{
+        .time = simd.Float4{0,0,0,0},
+        .resolution = simd.Float2{1,1},
         .mvp = .{},
         .m = .{},
     },
@@ -253,7 +262,7 @@ const Demo = struct {
             else vk.GetDeviceQueue(device, present_index.?, 0);
 
         // Create Allocator
-        const vma_funcs = vma.VulkanFunctions.init(instance, device);
+        const vma_funcs = vma.VulkanFunctions.init(instance, device, vk.vkGetInstanceProcAddr);
         const vma_alloc = try vma.Allocator.create(.{
             .physicalDevice = gpu,
             .device = device,
@@ -332,7 +341,7 @@ const Demo = struct {
             }
 
             const preferred_alpha_flags = [_]vk.CompositeAlphaFlagsKHR{
-                .{ .opaqueBit = true },
+                .{ .@"opaque" = true },
                 .{ .preMultiplied = true },
                 .{ .postMultiplied = true },
                 .{ .inherit = true },
@@ -342,7 +351,7 @@ const Demo = struct {
                     if (surf_caps.supportedCompositeAlpha.hasAllSet(f)) {
                         break f;
                     }
-                } else .{ .opaqueBit = true };
+                } else .{ .@"opaque" = true };
 
             break :create_swapchain try vk.CreateSwapchainKHR(device, .{
                 .surface = surface,
@@ -399,7 +408,7 @@ const Demo = struct {
             const ranges = [_]vk.PushConstantRange{ .{
                 .stageFlags = vk.ShaderStageFlags.allGraphics,
                 .offset = 0,
-                .size = PUSH_CONSTANT_BYTES,
+                .size = cmn.PUSH_CONSTANT_BYTES,
             } };
 
             break :create_layout try vk.CreatePipelineLayout(device, .{
@@ -408,11 +417,11 @@ const Demo = struct {
             }, null);
         };
 
-        const fractal_pipeline = try createFractalPipeline(device, pipeline_cache, render_pass, width, height, pipeline_layout);
-        const mesh_pipeline = try createMeshPipeline(device, pipeline_cache, render_pass, width, height, pipeline_layout);
+        const fractal_pipeline = try pipelines.createFractalPipeline(device, pipeline_cache, render_pass, width, height, pipeline_layout);
+        const mesh_pipeline = try pipelines.createMeshPipeline(device, pipeline_cache, render_pass, width, height, pipeline_layout);
 
         // Create Cube Mesh
-        const cube = try GpuMesh.init(device, vma_alloc, cube_cpu);
+        const cube = try cmn.GpuMesh.init(device, vma_alloc, cube_cpu);
 
         var d = Demo{
             .instance = instance,
@@ -708,8 +717,8 @@ const Demo = struct {
                         const idx_count = cube_cpu.index_count;
                         const vert_count = cube_cpu.vertex_count;
                         const idx_size = idx_count * (@as(usize, @sizeOf(u16)) << @intCast(u1, @enumToInt(d.cube_gpu.idx_type)));
-                        const pos_size = @sizeOf(Float3) * vert_count;
-                        const colors_size = @sizeOf(Float3) * vert_count;
+                        const pos_size = @sizeOf(simd.Float3) * vert_count;
+                        const colors_size = @sizeOf(simd.Float3) * vert_count;
                         const b = d.cube_gpu.gpu.buffer;
                         const buffers = [_]vk.Buffer{b, b, b};
                         const offsets = [_]vk.DeviceSize{
@@ -843,7 +852,7 @@ const Demo = struct {
         d.* = undefined;
     }
 
-    fn uploadMesh(demo: *Demo, m: GpuMesh) void {
+    fn uploadMesh(demo: *Demo, m: cmn.GpuMesh) void {
         const idx = demo.mesh_upload_count;
         demo.mesh_upload_queue[idx] = m;
         demo.mesh_upload_count = idx + 1;
@@ -852,7 +861,7 @@ const Demo = struct {
 
 fn hasLayer(name: []const u8, layers: []const vk.LayerProperties) bool {
     for (layers) |*layer| {
-        const layer_name = std.mem.spanZ(&layer.layerName);
+        const layer_name = std.mem.sliceTo(&layer.layerName, 0);
         if (std.mem.eql(u8, name, layer_name)) {
             return true;
         }

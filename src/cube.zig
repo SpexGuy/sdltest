@@ -1,6 +1,7 @@
-usingnamespace @import("common.zig");
+const cmn = @import("common.zig");
+const simd = @import("simd.zig");
 
-pub const cpu_mesh: CpuMesh = .{
+pub const cpu_mesh: cmn.CpuMesh = .{
     .index_size = @sizeOf(@TypeOf(indices)),
     .geom_size =
         @sizeOf(@TypeOf(positions)) +
@@ -25,7 +26,7 @@ const indices = [_]u16{
     20, 21, 22, 22, 21, 23, // Bottom
 };
 
-const positions = [_]Float3{
+const positions = [_]simd.Float3{
     // front
     .{-1, -1, -1}, // point blue
     .{ 1, -1, -1}, // point magenta
@@ -58,7 +59,7 @@ const positions = [_]Float3{
     .{ 1, -1, -1}  // point magenta
 };
 
-const colors = [_]Float3{
+const colors = [_]simd.Float3{
     // front
     .{0, 0, 1}, // blue
     .{1, 0, 1}, // magenta
@@ -91,7 +92,7 @@ const colors = [_]Float3{
     .{1, 0, 1}  // magenta
 };
 
-const normals = [_]Float3{
+const normals = [_]simd.Float3{
     // front
     .{ 0,  0,  1}, // forward
     .{ 0,  0,  1}, // forward

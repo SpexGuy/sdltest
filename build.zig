@@ -1,6 +1,6 @@
 const std = @import("std");
 const Builder = std.build.Builder;
-const vma_config = @import("include/vma_config.zig");
+const vma_build = @import("Zig-VMA/vma_build.zig");
 
 pub fn build(b: *Builder) !void {
     // Standard target options allows the person running `zig build` to choose
@@ -27,40 +27,32 @@ pub fn build(b: *Builder) !void {
     exe.step.dependOn(fractal);
     exe.step.dependOn(mesh);
 
-    try linkSDL(b, exe, target, mode);
+    try linkSDL(exe, target, mode);
 
     // Link platform object files
     if (target.isWindows()) {
-        exe.linkSystemLibrary("lib/win_x64/vulkan-1");
+        exe.addObjectFile("lib/win_x64/vulkan-1.lib");
     } else {
-        return error.TodoLinkLibrariesForNonWindowsPlatforms;
+        exe.linkSystemLibrary("vulkan");
     }
 
     // Link VMA source directly
-    exe.addCSourceFile("c_src/vma.cpp", getVmaArgs(mode));
-    exe.addIncludeDir("c_src/vma");
-    if (target.getAbi() != .msvc) {
-        exe.linkSystemLibrary("c++");
-    }
 
+    const vk_root = "include/vulkan_core.zig";
     const vk: std.build.Pkg = .{
         .name = "vk",
-        .path = "include/vulkan_core.zig",
+        .source = .{ .path = vk_root },
     };
     const sdl: std.build.Pkg = .{
         .name = "sdl",
-        .path = "include/sdl.zig",
-        .dependencies = &.{ vk },
-    };
-    const vma: std.build.Pkg = .{
-        .name = "vma",
-        .path = "include/vma.zig",
+        .source = .{ .path = "include/sdl.zig" },
         .dependencies = &.{ vk },
     };
 
     exe.addPackage(vk);
     exe.addPackage(sdl);
-    exe.addPackage(vma);
+
+    vma_build.link(exe, vk_root, mode, target);
 
     exe.install();
 
@@ -98,7 +90,9 @@ fn addShaderSteps(b: *Builder, name: []const u8, debug: bool) *std.build.Step {
     return step;
 }
 
-fn linkSDL(b: *Builder, step: *std.build.LibExeObjStep, target: std.zig.CrossTarget, mode: std.builtin.Mode) !void {
+fn linkSDL(step: *std.build.LibExeObjStep, target: std.zig.CrossTarget, mode: std.builtin.Mode) !void {
+    const b = step.builder;
+
     step.addIncludeDir("sdl/include");
     step.addIncludeDir("sdl/src/video/khronos");
 
@@ -365,78 +359,6 @@ fn collectChildDirectories(b: *Builder, path: []const u8) ![]const []const u8 {
     return dirs.toOwnedSlice();
 }
 
-fn getVmaArgs(mode: std.builtin.Mode) []const []const u8 {
-    const commonArgs = &[_][]const u8 { "-std=c++14" };
-    const releaseArgs = &[_][]const u8 { } ++ commonArgs ++ comptime getVmaConfigArgs(vma_config.releaseConfig);
-    const debugArgs = &[_][]const u8 { } ++ commonArgs ++ comptime getVmaConfigArgs(vma_config.debugConfig);
-    const args = if (mode == .Debug) debugArgs else releaseArgs;
-    return args;
-}
-
-fn getVmaConfigArgs(comptime config: vma_config.Config) []const []const u8 {
-    comptime {
-        @setEvalBranchQuota(100000);
-        var args: []const []const u8 = &[_][]const u8 {
-            std.fmt.comptimePrint("-DVMA_VULKAN_VERSION={}", .{ config.vulkanVersion }),
-            std.fmt.comptimePrint("-DVMA_DEDICATED_ALLOCATION={}", .{ @boolToInt(config.dedicatedAllocation)}),
-            std.fmt.comptimePrint("-DVMA_BIND_MEMORY2={}", .{ @boolToInt(config.bindMemory2)}),
-            std.fmt.comptimePrint("-DVMA_MEMORY_BUDGET={}", .{ @boolToInt(config.memoryBudget)}),
-            std.fmt.comptimePrint("-DVMA_STATIC_VULKAN_FUNCTIONS={}", .{ @boolToInt(config.staticVulkanFunctions)}),
-            std.fmt.comptimePrint("-DVMA_STATS_STRING_ENABLED={}", .{ @boolToInt(config.statsStringEnabled)}),
-        };
-        if (config.debugInitializeAllocations) |value| {
-            args = args ++ &[_][]const u8 { std.fmt.comptimePrint(
-                "-DVMA_DEBUG_INITIALIZE_ALLOCATIONS={}",
-                .{ @boolToInt(value) },
-            ) };
-        }
-        if (config.debugMargin) |value| {
-            args = args ++ &[_][]const u8 { std.fmt.comptimePrint(
-                "-DVMA_DEBUG_MARGIN={}",
-                .{ value },
-            ) };
-        }
-        if (config.debugDetectCorruption) |value| {
-            args = args ++ &[_][]const u8 { std.fmt.comptimePrint(
-                "-DVMA_DEBUG_DETECT_CORRUPTION={}",
-                .{ @boolToInt(value) },
-            ) };
-        }
-        if (config.recordingEnabled) |value| {
-            args = args ++ &[_][]const u8 { std.fmt.comptimePrint(
-                "-DVMA_RECORDING_ENABLED={}",
-                .{ @boolToInt(value) },
-            ) };
-        }
-        if (config.debugMinBufferImageGranularity) |value| {
-            args = args ++ &[_][]const u8 { std.fmt.comptimePrint(
-                "-DVMA_DEBUG_MIN_BUFFER_IMAGE_GRANULARITY={}",
-                .{ value },
-            ) };
-        }
-        if (config.debugGlobalMutex) |value| {
-            args = args ++ &[_][]const u8 { std.fmt.comptimePrint(
-                "-DVMA_DEBUG_GLOBAL_MUTEX={}",
-                .{ @boolToInt(value) },
-            ) };
-        }
-        if (config.useStlContainers) |value| {
-            args = args ++ &[_][]const u8 { std.fmt.comptimePrint(
-                "-DVMA_USE_STL_CONTAINERS={}",
-                .{ @boolToInt(value) },
-            ) };
-        }
-        if (config.useStlSharedMutex) |value| {
-            args = args ++ &[_][]const u8 { std.fmt.comptimePrint(
-                "-DVMA_USE_STL_SHARED_MUTEX={}",
-                .{ @boolToInt(value) },
-            ) };
-        }
-
-        return args;
-    }
-}
-
 const DxcCompileShaderStep = struct {
     step: std.build.Step,
     builder: *Builder,
@@ -452,7 +374,7 @@ const DxcCompileShaderStep = struct {
     pub fn createVert(b: *Builder, hlsl_file: []const u8, out_file: []const u8) *DxcCompileShaderStep {
         const self = b.allocator.create(@This()) catch unreachable;
         self.* = .{
-            .step = std.build.Step.init(.Custom, hlsl_file, b.allocator, make),
+            .step = std.build.Step.init(.custom, hlsl_file, b.allocator, make),
             .builder = b,
             .hlsl_file = b.dupePath(hlsl_file),
             .out_file = b.dupePath(out_file),
@@ -465,7 +387,7 @@ const DxcCompileShaderStep = struct {
     pub fn createFrag(b: *Builder, hlsl_file: []const u8, out_file: []const u8) *DxcCompileShaderStep {
         const self = b.allocator.create(@This()) catch unreachable;
         self.* = .{
-            .step = std.build.Step.init(.Custom, hlsl_file, b.allocator, make),
+            .step = std.build.Step.init(.custom, hlsl_file, b.allocator, make),
             .builder = b,
             .hlsl_file = b.dupePath(hlsl_file),
             .out_file = b.dupePath(out_file),
